@@ -1,10 +1,8 @@
 package com.app.pcbook.service;
 
-import com.app.pcbook.CreateLaptopRequest;
-import com.app.pcbook.CreateLaptopResponse;
-import com.app.pcbook.Laptop;
-import com.app.pcbook.LaptopServiceGrpc;
+import com.app.pcbook.*;
 import com.app.pcbook.exception.AlreadyExistsException;
+import io.grpc.Context;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 
@@ -42,6 +40,18 @@ public class LaptopService extends LaptopServiceGrpc.LaptopServiceImplBase {
                 return;
             }
         }
+
+        if (Context.current().isCancelled()) {
+            logger.info("request is cancelled");
+            responseObserver.onError(
+                    Status.CANCELLED
+                            .withDescription("request is cancelled")
+                            .asRuntimeException()
+            );
+            return;
+        }
+
+
         Laptop other = laptop.toBuilder().setId(uuid.toString()).build();
         try {
             laptopStore.save(other);
@@ -65,5 +75,27 @@ public class LaptopService extends LaptopServiceGrpc.LaptopServiceImplBase {
         responseObserver.onCompleted();
 
         logger.info("saved laptop with ID: " + other.getId());
+    }
+
+    public void searchLaptop(SearchLaptopRequest request, StreamObserver<SearchLaptopResponse> responseObserver) {
+        Filter filter = request.getFilter();
+
+        logger.info("got a search-request with filter " + filter);
+
+        laptopStore.search(Context.current(), filter, new LaptopStream() {
+            @Override
+            public void send(Laptop laptop) {
+                logger.info("Laptop with ID : " + laptop.getId() + " is found");
+                SearchLaptopResponse response = SearchLaptopResponse
+                        .newBuilder()
+                        .setLaptop(laptop)
+                        .build();
+
+                responseObserver.onNext(response);
+            }
+        });
+
+        responseObserver.onCompleted();
+        logger.info("search laptop completed");
     }
 }

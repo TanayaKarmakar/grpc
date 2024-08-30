@@ -4,6 +4,7 @@ import com.app.pcbook.*;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 
+import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -44,13 +45,61 @@ public class LaptopClient {
 
     }
 
+    private void searchLaptop(Filter filter) {
+        logger.info("search started");
+
+        SearchLaptopRequest searchLaptopRequest = SearchLaptopRequest
+                .newBuilder()
+                .setFilter(filter)
+                .build();
+
+        try {
+            Iterator<SearchLaptopResponse> responseIterator = stub
+                    .withDeadlineAfter(5, TimeUnit.SECONDS)
+                    .searchLaptop(searchLaptopRequest);
+
+            while (responseIterator.hasNext()) {
+                SearchLaptopResponse response = responseIterator.next();
+
+                Laptop laptop = response.getLaptop();
+
+                logger.info("Laptop found - " + laptop.getId());
+            }
+        } catch (Exception exception) {
+            logger.log(Level.SEVERE, "Request failed " + exception.getMessage());
+            return;
+        }
+
+        logger.info("search completed");
+    }
+
     public static void main(String[] args) throws InterruptedException {
         LaptopClient laptopClient = new LaptopClient("0.0.0.0", 8080);
         Generator generator = new Generator();
         Laptop laptop = generator.newLapTop();
 
         try {
-           laptopClient.createLaptop(laptop);
+            for(int i = 0; i < 10; i++) {
+                laptopClient.createLaptop(laptop);
+            }
+
+            Memory minRam = Memory
+                    .newBuilder()
+                    .setValue(8)
+                    .setUnit(Memory.Unit.GIGABYTE)
+                    .build();
+
+
+            Filter filter = Filter.newBuilder()
+                    .setMaxPriceUsd(3000)
+                    .setMinCpuCores(4)
+                    .setMinCpuGhz(2.5)
+                    .setMinRam(minRam)
+                    .build();
+
+
+            laptopClient.searchLaptop(filter);
+
         } finally {
             laptopClient.shutdown();
         }
